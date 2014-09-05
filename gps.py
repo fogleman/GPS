@@ -108,7 +108,7 @@ class Satellite(object):
 
 # Device Object
 class Device(object):
-    def __init__(self, port, baud_rate):
+    def __init__(self, port=PORT, baud_rate=BAUD_RATE):
         self.port = serial.Serial(port, baud_rate)
         self.handlers = {
             '$GPGGA': self.on_gga,
@@ -122,6 +122,9 @@ class Device(object):
         self.record = None
         self.gsv = {}
         self.satellites = {}
+    def run(self):
+        while True:
+            self.parse_line()
     def read_line(self):
         while True:
             line = self.port.readline().strip()
@@ -216,9 +219,8 @@ class Device(object):
 
 # Main
 def main():
-    device = Device(PORT, BAUD_RATE)
-    while True:
-        device.parse_line()
+    device = Device()
+    device.run()
 
 if __name__ == '__main__':
     main()
