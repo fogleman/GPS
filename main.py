@@ -94,8 +94,6 @@ class Window(pg.Window):
         matrix = matrix.perspective(65, self.aspect, 1, 100000)
         self.earth.matrix = matrix
         self.earth_sphere.draw(self.earth)
-    def update(self, t, dt):
-        pass
     def draw(self):
         self.clear()
         self.draw_earth()
