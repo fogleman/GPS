@@ -6,18 +6,12 @@ R1 = 6371
 R2 = R1 + 20200
 
 SPEED = 20000
+SATELLITE_SCALE = 20
 
-LATITUDE = 35.875274
-LONGITUDE = -78.840379
+LATITUDE = 36
+LONGITUDE = -79
 
-def to_xyz(lat, lng, radius):
-    point = (0, 0, radius)
-    matrix = pg.Matrix()
-    matrix = matrix.rotate((1, 0, 0), radians(lat))
-    matrix = matrix.rotate((0, 1, 0), -radians(lng))
-    return matrix * point
-
-def solve(lat, lng, elevation, azimuth):
+def to_xyz(lat, lng, elevation, azimuth):
     aa = radians(elevation) + pi / 2
     ar = asin(R1 * sin(aa) / R2)
     ad = pi - aa - ar
@@ -57,20 +51,21 @@ class Window(pg.Window):
         self.earth_sphere = pg.Sphere(4, R1)
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
+        m = SATELLITE_SCALE
         self.satellite = pg.STL('dawn.stl').center()
-        self.satellite = pg.Matrix().scale((64, 64, 64)) * self.satellite
+        self.satellite = pg.Matrix().scale((m, m, m)) * self.satellite
     def get_positions(self):
         record = self.device.record
         satellites = self.device.satellites
-        result = []
         if record and record.valid:
             lat = record.latitude
             lng = record.longitude
         else:
             lat = LATITUDE
             lng = LONGITUDE
+        result = []
         for satellite in satellites.values():
-            result.append(solve(
+            result.append(to_xyz(
                 lat, lng, satellite.elevation, satellite.azimuth))
         return result
     def get_model_matrix(self, matrix=None):
