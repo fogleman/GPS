@@ -22,6 +22,8 @@ DOP_STRING = {
 
 # Helper Functions
 def to_decimal(value, nsew):
+    if not value:
+        return None
     a, b = value.split('.')
     degrees = int(a) / 100
     minutes = int(a) % 100
@@ -42,10 +44,18 @@ def to_dop(value):
         return DOP_FAIR
     return DOP_POOR
 
+def parse_int(x):
+    return int(x) if x else None
+
+def parse_float(x):
+    return float(x) if x else None
+
 # Model Objects
 class Record(object):
     def __init__(self, **kwargs):
         # $GPRMC...
+        # valid fix
+        self.valid = kwargs['valid']
         # timestamp of fix
         self.timestamp = kwargs['timestamp']
         # latitude of fix
@@ -78,7 +88,7 @@ class Record(object):
         self.separation = kwargs['separation']
     def __repr__(self):
         keys = [
-            'timestamp', 'latitude', 'longitude', 'knots', 'course',
+            'valid', 'timestamp', 'latitude', 'longitude', 'knots', 'course',
             'mode', 'prns', 'pdop', 'hdop', 'vdop',
             'fix', 'count', 'altitude', 'separation',
         ]
@@ -129,11 +139,11 @@ class Device(object):
         timestamp = datetime.datetime.strptime(args[0], '%H%M%S.%f').time()
         latitude = to_decimal(args[1], args[2])
         longitude = to_decimal(args[3], args[4])
-        fix = int(args[5])
-        count = int(args[6])
-        hdop = float(args[7])
-        altitude = float(args[8])
-        separation = float(args[10])
+        fix = parse_int(args[5])
+        count = parse_int(args[6])
+        hdop = parse_float(args[7])
+        altitude = parse_float(args[8])
+        separation = parse_float(args[10])
         self.gga = dict(
             timestamp=timestamp,
             latitude=latitude,
@@ -145,11 +155,11 @@ class Device(object):
             separation=separation,
         )
     def on_gsa(self, args):
-        mode = int(args[1])
+        mode = parse_int(args[1])
         prns = map(int, filter(None, args[2:14]))
-        pdop = float(args[14])
-        hdop = float(args[15])
-        vdop = float(args[16])
+        pdop = parse_float(args[14])
+        hdop = parse_float(args[15])
+        vdop = parse_float(args[16])
         self.gsa = dict(
             mode=mode,
             prns=prns,
@@ -160,15 +170,15 @@ class Device(object):
     def on_rmc(self, args):
         if self.gga is None or self.gsa is None:
             return
-        if args[1] != 'A':
-            return
+        valid = args[1] == 'A'
         timestamp = datetime.datetime.strptime(args[8] + args[0],
             '%d%m%y%H%M%S.%f')
         latitude = to_decimal(args[2], args[3])
         longitude = to_decimal(args[4], args[5])
-        knots = float(args[6])
-        course = float(args[7])
+        knots = parse_float(args[6])
+        course = parse_float(args[7])
         self.rmc = dict(
+            valid=valid,
             timestamp=timestamp,
             latitude=latitude,
             longitude=longitude,
