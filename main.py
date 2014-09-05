@@ -1,17 +1,16 @@
 from math import radians, pi, asin, sin, cos, atan2
+from OpenGL.GL import *
 import gps
 import pg
 
 RADIUS = 6371
 ALTITUDE = 20200
-
 SPEED = 10000
 SATELLITE_SCALE = 20
-
 LATITUDE = 36
 LONGITUDE = -79
-
-SIMULATE = True
+SIMULATE = False
+FONT = '/Library/Fonts/Arial.ttf'
 
 def to_xyz(lat, lng, elevation, azimuth, altitude=ALTITUDE):
     r1 = RADIUS
@@ -33,7 +32,7 @@ class Window(pg.Window):
         if not SIMULATE:
             self.device = gps.Device()
             pg.async(self.device.run)
-        self.font = pg.Font(self, 1, '/Library/Fonts/Arial.ttf', 12, bg=(0, 0, 0))
+        self.font = pg.Font(self, 1, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
         camera = to_xyz(LATITUDE, LONGITUDE, 90, 0, ALTITUDE * 2)
         light = pg.normalize((-1, 1, 1))
@@ -53,6 +52,18 @@ class Window(pg.Window):
         self.satellite = pg.STL('dawn.stl').center()
         # self.satellite = pg.Sphere(3, SATELLITE_SCALE)
         self.satellite = pg.Matrix().scale((m, m, m)) * self.satellite
+        self.lines = pg.Context(pg.SolidColorProgram())
+        self.lines.color = (1, 1, 1, 0.25)
+    def get_position(self):
+        if SIMULATE:
+            lat = LATITUDE
+            lng = LONGITUDE
+        else:
+            record = self.device.record
+            valid = record and record.valid
+            lat = record.latitude if valid else LATITUDE
+            lng = record.longitude if valid else LONGITUDE
+        return to_xyz(lat, lng, 0, 0, 0)
     def get_positions(self):
         result = []
         if SIMULATE:
@@ -81,6 +92,28 @@ class Window(pg.Window):
         matrix = matrix.rotate((0, 1, 0), rx)
         matrix = matrix.rotate((cos(rx), 0, sin(rx)), -ry)
         return matrix
+    def draw_lines(self):
+        bits = ('0' * 4 + '1' * 4) * 2
+        shift = int(self.t * 16) % len(bits)
+        bits = bits[shift:] + bits[:shift]
+        glLineStipple(1, int(bits, 2))
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        matrix = self.wasd.get_matrix()
+        matrix = matrix.perspective(65, self.aspect, 1, 100000)
+        self.lines.matrix = matrix
+        data = []
+        x1, y1, z1 = self.get_position()
+        for x2, y2, z2 in self.get_positions():
+            data.append((x2, y2, z2))
+            data.append((x1, y1, z1))
+        if data:
+            self.lines.position = pg.VertexBuffer(data)
+            glEnable(GL_BLEND)
+            glEnable(GL_LINE_STIPPLE)
+            self.lines.draw(pg.GL_LINES)
+            glDisable(GL_LINE_STIPPLE)
+            glDisable(GL_BLEND)
+            self.lines.position.delete()
     def draw_satellite(self, position):
         self.context.camera_position = self.wasd.position
         matrix = self.rotate_satellite(position)
@@ -102,10 +135,11 @@ class Window(pg.Window):
         self.draw_earth()
         for position in self.get_positions():
             self.draw_satellite(position)
-        w, h = self.size
-        self.font.render('%.1f fps' % self.fps, (w - 5, 0), (1, 0))
-        text = 'x=%.2f, y=%.2f, z=%.2f' % self.wasd.position
-        self.font.render(text, (5, 0))
+        self.draw_lines()
+        # w, h = self.size
+        # self.font.render('%.1f fps' % self.fps, (w - 5, 0), (1, 0))
+        # text = '%.2f, %.2f, %.2f' % self.wasd.position
+        # self.font.render(text, (5, 0))
 
 if __name__ == "__main__":
     pg.run(Window)
