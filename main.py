@@ -1,5 +1,6 @@
 from math import radians, pi, asin, sin, cos, atan2
 from OpenGL.GL import *
+from sun import sun
 import gps
 import pg
 
@@ -35,10 +36,8 @@ class Window(pg.Window):
         self.font = pg.Font(self, 1, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
         camera = to_xyz(LATITUDE, LONGITUDE, 90, 0, ALTITUDE * 2)
-        light = pg.normalize((-1, 1, 1))
         self.wasd.look_at(camera, (0, 0, 0))
         self.earth = pg.Context(pg.DirectionalLightProgram())
-        self.earth.light_direction = light
         self.earth.sampler = pg.Texture(0, 'earth.jpg')
         self.earth.use_texture = True
         self.earth.ambient_color = (0.1, 0.1, 0.1)
@@ -46,7 +45,6 @@ class Window(pg.Window):
         self.earth.specular_multiplier = 0.5
         self.earth_sphere = pg.Sphere(4, RADIUS)
         self.context = pg.Context(pg.DirectionalLightProgram())
-        self.context.light_direction = light
         self.context.object_color = (1, 1, 1)
         m = SATELLITE_SCALE
         self.satellite = pg.STL('dawn.stl').center()
@@ -54,7 +52,7 @@ class Window(pg.Window):
         self.satellite = pg.Matrix().scale((m, m, m)) * self.satellite
         self.lines = pg.Context(pg.SolidColorProgram())
         self.lines.color = (1, 1, 1, 0.25)
-    def get_position(self):
+    def get_lat_lng(self):
         if SIMULATE:
             lat = LATITUDE
             lng = LONGITUDE
@@ -63,9 +61,13 @@ class Window(pg.Window):
             valid = record and record.valid
             lat = record.latitude if valid else LATITUDE
             lng = record.longitude if valid else LONGITUDE
+        return (lat, lng)
+    def get_position(self):
+        lat, lng = self.get_lat_lng()
         return to_xyz(lat, lng, 0, 0, 0)
     def get_positions(self):
         result = []
+        lat, lng = self.get_lat_lng()
         if SIMULATE:
             data = []
             data += [(i, 0) for i in range(0, 91, 15)]
@@ -74,16 +76,17 @@ class Window(pg.Window):
             data += [(i, 270) for i in range(0, 90, 15)]
             data += [(0, i) for i in range(0, 361, 15)]
             for elevation, azimuth in data:
-                result.append(to_xyz(LATITUDE, LONGITUDE, elevation, azimuth))
+                result.append(to_xyz(lat, lng, elevation, azimuth))
         else:
-            record = self.device.record
-            valid = record and record.valid
-            lat = record.latitude if valid else LATITUDE
-            lng = record.longitude if valid else LONGITUDE
             for satellite in self.device.satellites.values():
-                result.append(to_xyz(
-                    lat, lng, satellite.elevation, satellite.azimuth))
+                elevation = satellite.elevation
+                azimuth = satellite.azimuth
+                result.append(to_xyz(lat, lng, elevation, azimuth))
         return result
+    def get_sun(self):
+        lat, lng = self.get_lat_lng()
+        elevation, azimuth = sun(lat, lng)
+        return pg.normalize(to_xyz(lat, lng, elevation, azimuth))
     def rotate_satellite(self, position):
         dx, dy, dz = pg.normalize(position)
         rx = atan2(dz, dx) + pi / 2
@@ -116,6 +119,7 @@ class Window(pg.Window):
             self.lines.position.delete()
     def draw_satellite(self, position):
         self.context.camera_position = self.wasd.position
+        self.context.light_direction = self.get_sun()
         matrix = self.rotate_satellite(position)
         self.context.normal_matrix = matrix.inverse().transpose()
         matrix = matrix.translate(position)
@@ -126,6 +130,7 @@ class Window(pg.Window):
         self.satellite.draw(self.context)
     def draw_earth(self):
         self.earth.camera_position = self.wasd.position
+        self.earth.light_direction = self.get_sun()
         matrix = self.wasd.get_matrix()
         matrix = matrix.perspective(65, self.aspect, 1, 100000)
         self.earth.matrix = matrix
