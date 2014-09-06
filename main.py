@@ -1,6 +1,6 @@
-from math import radians, pi, asin, sin, cos, atan2
+from math import radians, degrees, pi, asin, sin, cos, atan2
 from OpenGL.GL import *
-from sun import sun
+import ephem
 import gps
 import pg
 
@@ -41,8 +41,8 @@ class Window(pg.Window):
         self.earth.night = pg.Texture(1, 'earth_night.jpg')
         self.earth.ambient_color = (0.4, 0.4, 0.4)
         self.earth.light_color = (1.25, 1.25, 1.25)
-        self.earth.specular_power = 32.0
-        self.earth.specular_multiplier = 0.25
+        self.earth.specular_power = 20.0
+        self.earth.specular_multiplier = 0.3
         self.earth_sphere = pg.Sphere(5, RADIUS)
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
@@ -69,9 +69,19 @@ class Window(pg.Window):
                 lat, lng, satellite.elevation, satellite.azimuth))
         return result
     def get_sun(self):
-        lat, lng = self.get_lat_lng()
-        elevation, azimuth = sun(lat, lng)
-        return pg.normalize(to_xyz(lat, lng, elevation, azimuth))
+        record = self.device.record
+        valid = record and record.valid
+        if not valid:
+            return (0, 0, 1)
+        observer = ephem.Observer()
+        observer.lat = radians(record.latitude)
+        observer.lon = radians(record.longitude)
+        observer.date = ephem.now()
+        sun = ephem.Sun(observer)
+        elevation = degrees(sun.alt)
+        azimuth = degrees(sun.az)
+        return pg.normalize(to_xyz(
+            record.latitude, record.longitude, elevation, azimuth))
     def rotate_satellite(self, position):
         dx, dy, dz = pg.normalize(position)
         rx = atan2(dz, dx) + pi / 2
@@ -196,9 +206,9 @@ class EarthProgram(pg.BaseProgram):
             specular = pow(max(dot(camera_vector,
                 reflect(-light_direction, frag_normal)), 0.0), specular_power);
         }
-        vec3 light = ambient_color + light_color * diffuse +
-            specular * specular_multiplier;
-        gl_FragColor = vec4(min(color * light, vec3(1.0)), 1.0);
+        vec3 light = ambient_color + light_color * diffuse;
+        vec3 spec = vec3(1.0, 1.0, 0.9) * specular * specular_multiplier;
+        gl_FragColor = vec4(min(color * light + spec, vec3(1.0)), 1.0);
     }
     '''
 
