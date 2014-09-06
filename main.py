@@ -8,9 +8,6 @@ RADIUS = 6371
 ALTITUDE = 20200
 SPEED = 10000
 SATELLITE_SCALE = 20
-LATITUDE = 36
-LONGITUDE = -79
-SIMULATE = False
 FONT = '/Library/Fonts/Arial.ttf'
 
 def to_xyz(lat, lng, elevation, azimuth, altitude=ALTITUDE):
@@ -30,13 +27,12 @@ def to_xyz(lat, lng, elevation, azimuth, altitude=ALTITUDE):
 
 class Window(pg.Window):
     def setup(self):
-        if not SIMULATE:
-            self.device = gps.Device()
-            pg.async(self.device.run)
+        self.device = gps.Device()
+        pg.async(self.device.run)
+        self.fix = False
         self.font = pg.Font(self, 1, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
-        camera = to_xyz(LATITUDE, LONGITUDE, 90, 0, ALTITUDE * 2)
-        self.wasd.look_at(camera, (0, 0, 0))
+        self.wasd.look_at((0, 0, RADIUS + ALTITUDE * 2), (0, 0, 0))
         self.earth = pg.Context(pg.DirectionalLightProgram())
         self.earth.sampler = pg.Texture(0, 'earth.jpg')
         self.earth.use_texture = True
@@ -53,14 +49,10 @@ class Window(pg.Window):
         self.lines = pg.Context(pg.SolidColorProgram())
         self.lines.color = (1, 1, 1, 0.25)
     def get_lat_lng(self):
-        if SIMULATE:
-            lat = LATITUDE
-            lng = LONGITUDE
-        else:
-            record = self.device.record
-            valid = record and record.valid
-            lat = record.latitude if valid else LATITUDE
-            lng = record.longitude if valid else LONGITUDE
+        record = self.device.record
+        valid = record and record.valid
+        lat = record.latitude if valid else 0
+        lng = record.longitude if valid else 0
         return (lat, lng)
     def get_position(self):
         lat, lng = self.get_lat_lng()
@@ -68,20 +60,9 @@ class Window(pg.Window):
     def get_positions(self):
         result = []
         lat, lng = self.get_lat_lng()
-        if SIMULATE:
-            data = []
-            data += [(i, 0) for i in range(0, 91, 15)]
-            data += [(i, 90) for i in range(0, 90, 15)]
-            data += [(i, 180) for i in range(0, 90, 15)]
-            data += [(i, 270) for i in range(0, 90, 15)]
-            data += [(0, i) for i in range(0, 361, 15)]
-            for elevation, azimuth in data:
-                result.append(to_xyz(lat, lng, elevation, azimuth))
-        else:
-            for satellite in self.device.satellites.values():
-                elevation = satellite.elevation
-                azimuth = satellite.azimuth
-                result.append(to_xyz(lat, lng, elevation, azimuth))
+        for satellite in self.device.satellites.values():
+            result.append(to_xyz(
+                lat, lng, satellite.elevation, satellite.azimuth))
         return result
     def get_sun(self):
         lat, lng = self.get_lat_lng()
@@ -135,16 +116,24 @@ class Window(pg.Window):
         matrix = matrix.perspective(65, self.aspect, 1, 100000)
         self.earth.matrix = matrix
         self.earth_sphere.draw(self.earth)
+    def draw_text(self):
+        w, h = self.size
+        record = self.device.record
+        if record and record.timestamp:
+            self.font.render(record.timestamp.isoformat(), (5, 0))
+    def update(self, t, dt):
+        lat, lng = self.get_lat_lng()
+        if not self.fix and any((lat, lng)):
+            camera = to_xyz(lat, lng, 90, 0, ALTITUDE * 2)
+            self.wasd.look_at(camera, (0, 0, 0))
+            self.fix = True
     def draw(self):
         self.clear()
         self.draw_earth()
         for position in self.get_positions():
             self.draw_satellite(position)
         self.draw_lines()
-        # w, h = self.size
-        # self.font.render('%.1f fps' % self.fps, (w - 5, 0), (1, 0))
-        # text = '%.2f, %.2f, %.2f' % self.wasd.position
-        # self.font.render(text, (5, 0))
+        self.draw_text()
 
 if __name__ == "__main__":
     pg.run(Window)
