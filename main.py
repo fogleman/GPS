@@ -30,16 +30,17 @@ class Window(pg.Window):
         self.device = gps.Device()
         pg.async(self.device.run)
         self.fix = False
-        self.font = pg.Font(self, 1, FONT, 18, bg=(0, 0, 0))
+        self.font = pg.Font(self, 2, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
         self.wasd.look_at((0, 0, RADIUS + ALTITUDE * 2), (0, 0, 0))
-        self.earth = pg.Context(pg.DirectionalLightProgram())
-        self.earth.sampler = pg.Texture(0, 'earth.jpg')
-        self.earth.use_texture = True
-        self.earth.ambient_color = (0.1, 0.1, 0.1)
-        self.earth.light_color = (0.9, 0.9, 0.9)
-        self.earth.specular_multiplier = 0.5
-        self.earth_sphere = pg.Sphere(4, RADIUS)
+        self.earth = pg.Context(Program())
+        self.earth.day = pg.Texture(0, 'earth_day.jpg')
+        self.earth.night = pg.Texture(1, 'earth_night.jpg')
+        self.earth.ambient_color = (0.4, 0.4, 0.4)
+        self.earth.light_color = (1.75, 1.75, 1.75)
+        self.earth.specular_power = 32.0
+        self.earth.specular_multiplier = 0.25
+        self.earth_sphere = pg.Sphere(5, RADIUS)
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
         m = SATELLITE_SCALE
@@ -134,6 +135,62 @@ class Window(pg.Window):
             self.draw_satellite(position)
         self.draw_lines()
         self.draw_text()
+
+class Program(pg.BaseProgram):
+    VS = '''
+    #version 120
+
+    uniform mat4 matrix;
+
+    attribute vec4 position;
+    attribute vec3 normal;
+    attribute vec2 uv;
+
+    varying vec3 frag_position;
+    varying vec3 frag_normal;
+    varying vec2 frag_uv;
+
+    void main() {
+        gl_Position = matrix * position;
+        frag_position = vec3(position);
+        frag_normal = normal;
+        frag_uv = uv;
+    }
+    '''
+    FS = '''
+    #version 120
+
+    uniform sampler2D day;
+    uniform sampler2D night;
+    uniform vec3 camera_position;
+
+    uniform vec3 light_direction;
+    uniform vec3 ambient_color;
+    uniform vec3 light_color;
+    uniform float specular_power;
+    uniform float specular_multiplier;
+
+    varying vec3 frag_position;
+    varying vec3 frag_normal;
+    varying vec2 frag_uv;
+
+    void main() {
+        float diffuse = max(dot(frag_normal, light_direction), 0.0);
+        diffuse = pow(diffuse, 2.0);
+        vec3 day_color = vec3(texture2D(day, frag_uv));
+        vec3 night_color = vec3(texture2D(night, frag_uv));
+        vec3 color = mix(night_color, day_color, pow(diffuse, 0.2));
+        float specular = 0.0;
+        if (diffuse > 0.0) {
+            vec3 camera_vector = normalize(camera_position - frag_position);
+            specular = pow(max(dot(camera_vector,
+                reflect(-light_direction, frag_normal)), 0.0), specular_power);
+        }
+        vec3 light = ambient_color + light_color * diffuse +
+            specular * specular_multiplier;
+        gl_FragColor = vec4(min(color * light, vec3(1.0)), 1.0);
+    }
+    '''
 
 if __name__ == "__main__":
     pg.run(Window)
