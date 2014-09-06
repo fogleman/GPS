@@ -30,14 +30,17 @@ class Window(pg.Window):
         self.device = gps.Device()
         pg.async(self.device.run)
         self.fix = False
-        self.font = pg.Font(self, 2, FONT, 18, bg=(0, 0, 0))
+        self.font = pg.Font(self, 3, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
         self.wasd.look_at((0, 0, RADIUS + ALTITUDE * 2), (0, 0, 0))
-        self.earth = pg.Context(Program())
+        self.stars = pg.Context(StarsProgram())
+        self.stars.sampler = pg.Texture(2, 'stars.png')
+        self.stars_sphere = pg.Sphere(4).reverse_winding()
+        self.earth = pg.Context(EarthProgram())
         self.earth.day = pg.Texture(0, 'earth_day.jpg')
         self.earth.night = pg.Texture(1, 'earth_night.jpg')
         self.earth.ambient_color = (0.4, 0.4, 0.4)
-        self.earth.light_color = (1.75, 1.75, 1.75)
+        self.earth.light_color = (1.25, 1.25, 1.25)
         self.earth.specular_power = 32.0
         self.earth.specular_multiplier = 0.25
         self.earth_sphere = pg.Sphere(5, RADIUS)
@@ -117,6 +120,11 @@ class Window(pg.Window):
         matrix = matrix.perspective(65, self.aspect, 1, 100000)
         self.earth.matrix = matrix
         self.earth_sphere.draw(self.earth)
+    def draw_stars(self):
+        matrix = self.wasd.get_matrix(translate=False)
+        matrix = matrix.perspective(65, self.aspect, 0.1, 1)
+        self.stars.matrix = matrix
+        self.stars_sphere.draw(self.stars)
     def draw_text(self):
         w, h = self.size
         record = self.device.record
@@ -130,13 +138,15 @@ class Window(pg.Window):
             self.fix = True
     def draw(self):
         self.clear()
+        self.draw_stars()
+        self.clear_depth_buffer()
         self.draw_earth()
         for position in self.get_positions():
             self.draw_satellite(position)
         self.draw_lines()
         self.draw_text()
 
-class Program(pg.BaseProgram):
+class EarthProgram(pg.BaseProgram):
     VS = '''
     #version 120
 
@@ -176,10 +186,10 @@ class Program(pg.BaseProgram):
 
     void main() {
         float diffuse = max(dot(frag_normal, light_direction), 0.0);
-        diffuse = pow(diffuse, 2.0);
         vec3 day_color = vec3(texture2D(day, frag_uv));
         vec3 night_color = vec3(texture2D(night, frag_uv));
-        vec3 color = mix(night_color, day_color, pow(diffuse, 0.2));
+        float pct = 1.0 - pow(1.0 - diffuse, 4.0);
+        vec3 color = mix(night_color, day_color, pct);
         float specular = 0.0;
         if (diffuse > 0.0) {
             vec3 camera_vector = normalize(camera_position - frag_position);
@@ -189,6 +199,37 @@ class Program(pg.BaseProgram):
         vec3 light = ambient_color + light_color * diffuse +
             specular * specular_multiplier;
         gl_FragColor = vec4(min(color * light, vec3(1.0)), 1.0);
+    }
+    '''
+
+class StarsProgram(pg.BaseProgram):
+    VS = '''
+    #version 120
+
+    uniform mat4 matrix;
+
+    attribute vec4 position;
+    attribute vec2 uv;
+
+    varying vec2 frag_uv;
+
+    void main() {
+        gl_Position = matrix * position;
+        frag_uv = uv;
+    }
+    '''
+    FS = '''
+    #version 120
+
+    uniform sampler2D sampler;
+
+    varying vec2 frag_uv;
+
+    void main() {
+        vec3 color = vec3(texture2D(sampler, frag_uv));
+        color = pow(color, vec3(2.0));
+        color = mix(vec3(0.0), color, 0.5);
+        gl_FragColor = vec4(color, 1.0);
     }
     '''
 
