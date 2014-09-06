@@ -69,19 +69,15 @@ class Window(pg.Window):
                 lat, lng, satellite.elevation, satellite.azimuth))
         return result
     def get_sun(self):
-        record = self.device.record
-        valid = record and record.valid
-        if not valid:
-            return (0, 0, 1)
+        lat, lng = self.get_lat_lng()
         observer = ephem.Observer()
-        observer.lat = radians(record.latitude)
-        observer.lon = radians(record.longitude)
+        observer.lat = radians(lat)
+        observer.lon = radians(lng)
         observer.date = ephem.now()
         sun = ephem.Sun(observer)
         elevation = degrees(sun.alt)
         azimuth = degrees(sun.az)
-        return pg.normalize(to_xyz(
-            record.latitude, record.longitude, elevation, azimuth))
+        return pg.normalize(to_xyz(lat, lng, elevation, azimuth))
     def rotate_satellite(self, position):
         dx, dy, dz = pg.normalize(position)
         rx = atan2(dz, dx) + pi / 2
