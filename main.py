@@ -4,14 +4,19 @@ import ephem
 import gps
 import pg
 
-RADIUS = 6371
+EARTH_RADIUS = 6371
+MOON_RADIUS = 1737.1
+AU = 149597870.7
 ALTITUDE = 20200
 SPEED = 10000
 SATELLITE_SCALE = 20
 FONT = '/Library/Fonts/Arial.ttf'
 
+ZNEAR = 1
+ZFAR = 1000000
+
 def to_xyz(lat, lng, elevation, azimuth, altitude=ALTITUDE):
-    r1 = RADIUS
+    r1 = EARTH_RADIUS
     r2 = r1 + altitude
     aa = radians(elevation) + pi / 2
     ar = asin(r1 * sin(aa) / r2)
@@ -32,7 +37,7 @@ class Window(pg.Window):
         self.fix = False
         self.font = pg.Font(self, 3, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
-        self.wasd.look_at((0, 0, RADIUS + ALTITUDE * 2), (0, 0, 0))
+        self.wasd.look_at((0, 0, EARTH_RADIUS + ALTITUDE * 2), (0, 0, 0))
         self.stars = pg.Context(StarsProgram())
         self.stars.sampler = pg.Texture(2, 'stars.png')
         self.stars_sphere = pg.Sphere(4).reverse_winding()
@@ -43,7 +48,15 @@ class Window(pg.Window):
         self.earth.light_color = (1.25, 1.25, 1.25)
         self.earth.specular_power = 20.0
         self.earth.specular_multiplier = 0.3
-        self.earth_sphere = pg.Sphere(5, RADIUS)
+        self.earth_sphere = pg.Sphere(5, EARTH_RADIUS)
+        self.moon = pg.Context(pg.DirectionalLightProgram())
+        self.moon.use_texture = True
+        self.moon.sampler = pg.Texture(4, 'moon.jpg')
+        self.moon.ambient_color = (0.1, 0.1, 0.1)
+        self.moon.light_color = (1.3, 1.3, 1.3)
+        self.moon.specular_power = 20.0
+        self.moon.specular_multiplier = 0.3
+        self.moon_sphere = pg.Sphere(4, MOON_RADIUS)
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
         m = SATELLITE_SCALE
@@ -73,15 +86,34 @@ class Window(pg.Window):
         observer = ephem.Observer()
         observer.lat = radians(lat)
         observer.lon = radians(lng)
-        observer.date = ephem.now()
         sun = ephem.Sun(observer)
         elevation = degrees(sun.alt)
         azimuth = degrees(sun.az)
         return pg.normalize(to_xyz(lat, lng, elevation, azimuth))
+    def get_moon(self):
+        lat, lng = self.get_lat_lng()
+        observer = ephem.Observer()
+        observer.lat = radians(lat)
+        observer.lon = radians(lng)
+        moon = ephem.Moon(observer)
+        elevation = degrees(moon.alt)
+        azimuth = degrees(moon.az)
+        distance = moon.earth_distance * AU
+        altitude = distance - EARTH_RADIUS
+        return to_xyz(lat, lng, elevation, azimuth, altitude)
     def rotate_satellite(self, position):
         dx, dy, dz = pg.normalize(position)
         rx = atan2(dz, dx) + pi / 2
         ry = asin(dy) - pi / 2
+        matrix = pg.Matrix()
+        matrix = matrix.rotate((0, 1, 0), rx)
+        matrix = matrix.rotate((cos(rx), 0, sin(rx)), -ry)
+        return matrix
+    def rotate_moon(self, position):
+        # TODO: account for libration
+        dx, dy, dz = pg.normalize(position)
+        rx = atan2(dz, dx) + pi / 2
+        ry = asin(dy)
         matrix = pg.Matrix()
         matrix = matrix.rotate((0, 1, 0), rx)
         matrix = matrix.rotate((cos(rx), 0, sin(rx)), -ry)
@@ -93,7 +125,7 @@ class Window(pg.Window):
         glLineStipple(1, int(bits, 2))
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         matrix = self.wasd.get_matrix()
-        matrix = matrix.perspective(65, self.aspect, 1, 100000)
+        matrix = matrix.perspective(65, self.aspect, ZNEAR, ZFAR)
         self.lines.matrix = matrix
         data = []
         x1, y1, z1 = self.get_position()
@@ -116,16 +148,28 @@ class Window(pg.Window):
         matrix = matrix.translate(position)
         self.context.model_matrix = matrix
         matrix = self.wasd.get_matrix(matrix)
-        matrix = matrix.perspective(65, self.aspect, 1, 100000)
+        matrix = matrix.perspective(65, self.aspect, ZNEAR, ZFAR)
         self.context.matrix = matrix
         self.satellite.draw(self.context)
     def draw_earth(self):
         self.earth.camera_position = self.wasd.position
         self.earth.light_direction = self.get_sun()
         matrix = self.wasd.get_matrix()
-        matrix = matrix.perspective(65, self.aspect, 1, 100000)
+        matrix = matrix.perspective(65, self.aspect, ZNEAR, ZFAR)
         self.earth.matrix = matrix
         self.earth_sphere.draw(self.earth)
+    def draw_moon(self):
+        self.moon.camera_position = self.wasd.position
+        self.moon.light_direction = self.get_sun()
+        position = self.get_moon()
+        matrix = self.rotate_moon(position)
+        self.moon.normal_matrix = matrix.inverse().transpose()
+        matrix = matrix.translate(position)
+        self.moon.model_matrix = matrix
+        matrix = self.wasd.get_matrix(matrix)
+        matrix = matrix.perspective(65, self.aspect, ZNEAR, ZFAR)
+        self.moon.matrix = matrix
+        self.moon_sphere.draw(self.moon)
     def draw_stars(self):
         matrix = self.wasd.get_matrix(translate=False)
         matrix = matrix.perspective(65, self.aspect, 0.1, 1)
@@ -147,6 +191,7 @@ class Window(pg.Window):
         self.draw_stars()
         self.clear_depth_buffer()
         self.draw_earth()
+        self.draw_moon()
         for position in self.get_positions():
             self.draw_satellite(position)
         self.draw_lines()
