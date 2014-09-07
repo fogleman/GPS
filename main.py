@@ -39,11 +39,11 @@ class Window(pg.Window):
         self.wasd = pg.WASD(self, speed=SPEED)
         self.wasd.look_at((0, 0, EARTH_RADIUS + ALTITUDE * 2), (0, 0, 0))
         self.stars = pg.Context(StarsProgram())
-        self.stars.sampler = pg.Texture(2, 'stars.png')
+        self.stars.sampler = pg.Texture(2, 'resources/stars.png')
         self.stars_sphere = pg.Sphere(4).reverse_winding()
         self.earth = pg.Context(EarthProgram())
-        self.earth.day = pg.Texture(0, 'earth_day.jpg')
-        self.earth.night = pg.Texture(1, 'earth_night.jpg')
+        self.earth.day = pg.Texture(0, 'resources/earth_day.jpg')
+        self.earth.night = pg.Texture(1, 'resources/earth_night.jpg')
         self.earth.ambient_color = (0.4, 0.4, 0.4)
         self.earth.light_color = (1.25, 1.25, 1.25)
         self.earth.specular_power = 20.0
@@ -51,7 +51,7 @@ class Window(pg.Window):
         self.earth_sphere = pg.Sphere(5, EARTH_RADIUS)
         self.moon = pg.Context(pg.DirectionalLightProgram())
         self.moon.use_texture = True
-        self.moon.sampler = pg.Texture(4, 'moon.jpg')
+        self.moon.sampler = pg.Texture(4, 'resources/moon.jpg')
         self.moon.ambient_color = (0.1, 0.1, 0.1)
         self.moon.light_color = (1.3, 1.3, 1.3)
         self.moon.specular_power = 20.0
@@ -60,7 +60,7 @@ class Window(pg.Window):
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
         m = SATELLITE_SCALE
-        self.satellite = pg.STL('dawn.stl').center()
+        self.satellite = pg.STL('resources/dawn.stl').center()
         # self.satellite = pg.Sphere(3, SATELLITE_SCALE)
         self.satellite = pg.Matrix().scale((m, m, m)) * self.satellite
         self.lines = pg.Context(pg.SolidColorProgram())
