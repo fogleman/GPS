@@ -12,12 +12,9 @@ http://www.michaelfogleman.com/gps/
 
 ### Dependencies
 
-    pip install ephem
+    pip install ephem pg pyserial
 
-`pg` isn't in pip-installable yet! :(
+`pg` requires a glfw3 binary. On Mac, it's easy with Homebrew:
 
     brew tap homebrew/versions
     brew install glfw3
-    git clone https://github.com/fogleman/pg.git
-    cd pg
-    python setup.py install
