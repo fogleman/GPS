@@ -38,9 +38,11 @@ class Window(pg.Window):
         self.font = pg.Font(self, 3, FONT, 18, bg=(0, 0, 0))
         self.wasd = pg.WASD(self, speed=SPEED)
         self.wasd.look_at((0, 0, EARTH_RADIUS + ALTITUDE * 2), (0, 0, 0))
+        # stars
         self.stars = pg.Context(StarsProgram())
         self.stars.sampler = pg.Texture(2, 'resources/stars.png')
         self.stars_sphere = pg.Sphere(4).reverse_winding()
+        # earth
         self.earth = pg.Context(EarthProgram())
         self.earth.day = pg.Texture(0, 'resources/earth_day.jpg')
         self.earth.night = pg.Texture(1, 'resources/earth_night.jpg')
@@ -49,6 +51,7 @@ class Window(pg.Window):
         self.earth.specular_power = 20.0
         self.earth.specular_multiplier = 0.3
         self.earth_sphere = pg.Sphere(5, EARTH_RADIUS)
+        # moon
         self.moon = pg.Context(pg.DirectionalLightProgram())
         self.moon.use_texture = True
         self.moon.sampler = pg.Texture(4, 'resources/moon.jpg')
@@ -57,12 +60,13 @@ class Window(pg.Window):
         self.moon.specular_power = 20.0
         self.moon.specular_multiplier = 0.3
         self.moon_sphere = pg.Sphere(4, MOON_RADIUS)
+        # satellites
         self.context = pg.Context(pg.DirectionalLightProgram())
         self.context.object_color = (1, 1, 1)
         m = SATELLITE_SCALE
         self.satellite = pg.STL('resources/dawn.stl').center()
-        # self.satellite = pg.Sphere(3, SATELLITE_SCALE)
         self.satellite = pg.Matrix().scale((m, m, m)) * self.satellite
+        # lines
         self.lines = pg.Context(pg.SolidColorProgram())
         self.lines.color = (1, 1, 1, 0.25)
     def get_lat_lng(self):
@@ -129,7 +133,7 @@ class Window(pg.Window):
         self.lines.matrix = matrix
         data = []
         x1, y1, z1 = self.get_position()
-        for x2, y2, z2 in self.get_positions():
+        for x2, y2, z2 in self._positions:
             data.append((x2, y2, z2))
             data.append((x1, y1, z1))
         if data:
@@ -142,7 +146,7 @@ class Window(pg.Window):
             self.lines.position.delete()
     def draw_satellite(self, position):
         self.context.camera_position = self.wasd.position
-        self.context.light_direction = self.get_sun()
+        self.context.light_direction = self._sun
         matrix = self.rotate_satellite(position)
         self.context.normal_matrix = matrix.inverse().transpose()
         matrix = matrix.translate(position)
@@ -153,14 +157,14 @@ class Window(pg.Window):
         self.satellite.draw(self.context)
     def draw_earth(self):
         self.earth.camera_position = self.wasd.position
-        self.earth.light_direction = self.get_sun()
+        self.earth.light_direction = self._sun
         matrix = self.wasd.get_matrix()
         matrix = matrix.perspective(65, self.aspect, ZNEAR, ZFAR)
         self.earth.matrix = matrix
         self.earth_sphere.draw(self.earth)
     def draw_moon(self):
         self.moon.camera_position = self.wasd.position
-        self.moon.light_direction = self.get_sun()
+        self.moon.light_direction = self._sun
         position = self.get_moon()
         matrix = self.rotate_moon(position)
         self.moon.normal_matrix = matrix.inverse().transpose()
@@ -181,18 +185,22 @@ class Window(pg.Window):
         if record and record.timestamp:
             self.font.render(record.timestamp.isoformat(), (5, 0))
     def update(self, t, dt):
+        # position camera on first gps fix
         lat, lng = self.get_lat_lng()
         if not self.fix and any((lat, lng)):
             camera = to_xyz(lat, lng, 90, 0, ALTITUDE * 2)
             self.wasd.look_at(camera, (0, 0, 0))
             self.fix = True
+        # cache some values for the draw step
+        self._sun = self.get_sun()
+        self._positions = self.get_positions()
     def draw(self):
         self.clear()
         self.draw_stars()
         self.clear_depth_buffer()
         self.draw_earth()
         self.draw_moon()
-        for position in self.get_positions():
+        for position in self._positions:
             self.draw_satellite(position)
         self.draw_lines()
         self.draw_text()
